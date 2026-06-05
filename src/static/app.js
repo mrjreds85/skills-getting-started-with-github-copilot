@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // Reset activity select to avoid duplicate options on refresh
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -25,7 +27,57 @@ document.addEventListener("DOMContentLoaded", () => {
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants-section">
+            <p class="participants-title"><strong>Participants:</strong></p>
+            <ul class="participants-list">
+              ${details.participants && details.participants.length
+                ? details.participants
+                    .map(
+                      (p) =>
+                        `<li><span class="participant-email">${p}</span><button class="delete-participant" data-activity="${encodeURIComponent(
+                          name
+                        )}" data-email="${encodeURIComponent(p)}" aria-label="Remove ${p}">✖</button></li>`
+                    )
+                    .join("")
+                : '<li class="muted">No participants yet</li>'}
+            </ul>
+          </div>
         `;
+
+        // Attach delete handlers for participant buttons
+        activityCard.querySelectorAll(".delete-participant").forEach((btn) => {
+          btn.addEventListener("click", async (e) => {
+            const activityName = decodeURIComponent(btn.dataset.activity);
+            const email = decodeURIComponent(btn.dataset.email);
+
+            try {
+              const resp = await fetch(
+                `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`,
+                { method: "DELETE" }
+              );
+
+              const res = await resp.json();
+
+              if (resp.ok) {
+                messageDiv.textContent = res.message;
+                messageDiv.className = "success";
+                // Refresh activities to update UI
+                fetchActivities();
+              } else {
+                messageDiv.textContent = res.detail || "Failed to remove participant";
+                messageDiv.className = "error";
+              }
+
+              messageDiv.classList.remove("hidden");
+              setTimeout(() => messageDiv.classList.add("hidden"), 4000);
+            } catch (err) {
+              messageDiv.textContent = "Failed to remove participant";
+              messageDiv.className = "error";
+              messageDiv.classList.remove("hidden");
+              console.error("Error removing participant:", err);
+            }
+          });
+        });
 
         activitiesList.appendChild(activityCard);
 
@@ -51,9 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch(
         `/activities/${encodeURIComponent(activity)}/signup?email=${encodeURIComponent(email)}`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
 
       const result = await response.json();
@@ -62,6 +112,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities so the new participant appears immediately
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
